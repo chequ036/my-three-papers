@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>我的三张纸 · 进化版</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f7f7f7; padding: 16px; max-width: 640px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 12px; font-size: 24px; }
+        .daily-question { background: #eaf4ff; padding: 16px; border-radius: 12px; margin-bottom: 16px; font-size: 16px; color: #1a3c5e; border-left: 4px solid #4a90d9; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+        .tabs button { flex: 1; padding: 12px 8px; border: none; background: #e0e0e0; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: bold; }
+        .tabs button.active { background: #4a90d9; color: white; }
+        .textarea-container { margin-bottom: 12px; }
+        textarea { width: 100%; height: 160px; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; line-height: 1.5; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+        .actions button { padding: 10px 12px; font-size: 14px; border: none; border-radius: 8px; background: #333; color: white; cursor: pointer; flex: 1; min-width: 70px; }
+        .actions button.ai-btn { background: #4a90d9; font-weight: bold; }
+        .tag-cloud { margin: 16px 0; padding: 12px; background: white; border-radius: 8px; font-size: 14px; line-height: 2; }
+        .tag-cloud span { margin: 0 4px; cursor: default; }
+        .status { font-size: 13px; color: #888; text-align: center; margin-top: 8px; }
+        hr { margin: 16px 0; border: 0.5px solid #e0e0e0; }
+    </style>
+</head>
+<body>
+    <h1>📋 我的三张纸</h1>
+
+    <!-- 每日一问 -->
+    <div class="daily-question" id="dailyQuestion">今日一问：...</div>
+
+    <!-- 选项卡 -->
+    <div class="tabs">
+        <button class="active" data-tab="chaos">🌪️ 乱写本</button>
+        <button data-tab="review">📆 三行复盘</button>
+        <button data-tab="script">🎬 剧本纸</button>
+    </div>
+
+    <!-- 文本框 -->
+    <div class="textarea-container">
+        <textarea id="chaosText" placeholder="一切模糊的想法、想做的事、复制的内容……"></textarea>
+        <textarea id="reviewText" style="display:none" placeholder="1. 今天实际做的一个动作&#10;2. 一个卡住的点&#10;3. 一个模糊的明天"></textarea>
+        <textarea id="scriptText" style="display:none" placeholder="我的操作剧本（四格法）&#10;第一格：&#10;第二格：&#10;第三格：&#10;第四格："></textarea>
+    </div>
+
+    <!-- 按钮组 -->
+    <div class="actions">
+        <button id="aiCopyBtn" class="ai-btn">🤖 半自动 AI 总结</button>
+        <button id="exportAllBtn">📤 导出文本</button>
+        <button id="clearBtn">🗑️ 清空当前页</button>
+    </div>
+
+    <!-- 标签云 -->
+    <div class="tag-cloud" id="tagCloud"></div>
+
+    <div class="status" id="statusMsg">已自动保存 ✅</div>
+
+    <script>
+        // ----- 配置 -----
+        const STORAGE_PREFIX = 'three_papers_evolved_';
+        const tabs = document.querySelectorAll('.tabs button');
+        const textareas = {
+            chaos: document.getElementById('chaosText'),
+            review: document.getElementById('reviewText'),
+            script: document.getElementById('scriptText')
+        };
+        const statusMsg = document.getElementById('statusMsg');
+        const tagCloud = document.getElementById('tagCloud');
+        const dailyQuestionDiv = document.getElementById('dailyQuestion');
+
+        // ----- 每日一问题库 -----
+        const questions = [
+            "今天哪个瞬间让你觉得「我没白学」？",
+            "今天最让你想放弃的一件事是什么？",
+            "如果能把今天的一个行动变成 SOP，你会怎么描述？",
+            "今天你复制了哪句话到备忘录里？为什么？",
+            "今天的你和昨天的你，最大的不同是什么？",
+            "今天有哪个概念你觉得自己「好像懂了」？",
+            "今天有哪件事你明明知道该做，却一直拖着？",
+            "今天哪个工具让你觉得特别好用？",
+            "今天有哪句话（自己说的或别人说的）让你特别在意？",
+            "今天你最想感谢的一件小事是什么？"
+        ];
+
+        // 随机显示每日问题（每天只换一次）
+        function setDailyQuestion() {
+            const today = new Date().toDateString();
+            const lastDate = localStorage.getItem('lastQuestionDate');
+            let questionIndex;
+            if (lastDate === today) {
+                questionIndex = parseInt(localStorage.getItem('lastQuestionIndex') || '0');
+            } else {
+                questionIndex = Math.floor(Math.random() * questions.length);
+                localStorage.setItem('lastQuestionDate', today);
+                localStorage.setItem('lastQuestionIndex', questionIndex);
+            }
+            dailyQuestionDiv.textContent = '💡 ' + questions[questionIndex];
+        }
+
+        // ----- 自动加载存储内容 -----
+        Object.keys(textareas).forEach(key => {
+            const saved = localStorage.getItem(STORAGE_PREFIX + key);
+            if (saved !== null) {
+                textareas[key].value = saved;
+            }
+        });
+
+        // ----- 自动保存 -----
+        Object.values(textareas).forEach(textarea => {
+            textarea.addEventListener('input', () => {
+                const activeTab = document.querySelector('.tabs button.active').dataset.tab;
+                localStorage.setItem(STORAGE_PREFIX + activeTab, textarea.value);
+                statusMsg.textContent = '已自动保存 ✅';
+                setTimeout(() => { statusMsg.textContent = '已自动保存 ✅'; }, 2000);
+                generateTagCloud(); // 实时更新标签云
+            });
+        });
+
+        // ----- 选项卡切换 -----
+        tabs.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabs.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const target = btn.dataset.tab;
+                Object.keys(textareas).forEach(key => {
+                    textareas[key].style.display = (key === target) ? 'block' : 'none';
+                });
+            });
+        });
+
+        // ----- 清空当前页 -----
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            const activeTab = document.querySelector('.tabs button.active').dataset.tab;
+            if (confirm('确定要清空当前页内容吗？')) {
+                textareas[activeTab].value = '';
+                localStorage.removeItem(STORAGE_PREFIX + activeTab);
+                statusMsg.textContent = '已清空';
+                generateTagCloud();
+            }
+        });
+
+        // ----- 导出所有文本 -----
+        document.getElementById('exportAllBtn').addEventListener('click', () => {
+            const combined = `🌪️ 乱写本\n${textareas.chaos.value}\n\n📆 三行复盘\n${textareas.review.value}\n\n🎬 剧本纸\n${textareas.script.value}`;
+            const blob = new Blob([combined], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '三张纸_' + new Date().toISOString().slice(0,10) + '.txt';
+            a.click();
+            statusMsg.textContent = '导出成功';
+        });
+
+        // ----- 半自动 AI 总结：复制并跳转到 DeepSeek / 豆包 -----
+        document.getElementById('aiCopyBtn').addEventListener('click', () => {
+            const combined = `请帮我总结以下内容，提取重点、待办和情绪，用简洁的中文回复。\n\n---\n🌪️ 乱写本：\n${textareas.chaos.value}\n\n📆 三行复盘：\n${textareas.review.value}\n\n🎬 剧本纸：\n${textareas.script.value}`;
+            
+            // 复制到剪贴板
+            navigator.clipboard.writeText(combined).then(() => {
+                // 询问跳转哪个 AI
+                const choice = confirm('内容已复制！\n\n点“确定”前往 DeepSeek Chat（网页版），\n点“取消”留在当前页面（可自行粘贴到豆包等工具）');
+                if (choice) {
+                    window.open('https://chat.deepseek.com/', '_blank');
+                }
+                statusMsg.textContent = '已复制，粘贴到 AI 工具即可总结';
+            }).catch(() => {
+                statusMsg.textContent = '复制失败，请手动全选复制';
+            });
+        });
+
+        // ----- 标签云生成（简单分词 + 词频）-----
+        function generateTagCloud() {
+            const allText = textareas.chaos.value + ' ' + textareas.review.value + ' ' + textareas.script.value;
+            // 简单分词（按空格、标点、换行切分）
+            const words = allText.split(/[\s,，。！？、\-\+【】《》（）\(\)\[\]{}<>:：;；\"\'“”‘’`~!@#\$%^&\*\+\=\.\?\/\\\|]+/).filter(w => w.length >= 2);
+            const freq = {};
+            words.forEach(w => {
+                const lower = w.toLowerCase();
+                freq[lower] = (freq[lower] || 0) + 1;
+            });
+            // 过滤停用词（简单的）
+            const stopwords = ['的是', '一个', '我们', '这个', '那个', '你', '我', '他', '她', '它', '了', '在', '有', '和', '的', '是', '不', '这', '那', '怎么', '什么', '可以', '已经', '还是', '不是', '因为', '所以', '但是', '如果', '比如', '然后', '或者', '没有', '也', '很', '都', '对', '把', '被', '让', '从', '到', '与', '说', '看', '做', '想', '啊', '吧', '呢', '吗', '哦'];
+            const filtered = Object.entries(freq).filter(([word]) => !stopwords.includes(word) && word.length > 1);
+            // 按频次排序取前20
+            const top = filtered.sort((a, b) => b[1] - a[1]).slice(0, 20);
+            if (top.length === 0) {
+                tagCloud.innerHTML = '📊 标签云：暂无足够数据，多写点内容就会出现高频词啦';
+                return;
+            }
+            const maxFreq = top[0][1];
+            const minFreq = top[top.length-1][1];
+            // 生成 span，根据词频设置字体大小
+            tagCloud.innerHTML = '📊 标签云：' + top.map(([word, count]) => {
+                const size = 12 + Math.floor((count - minFreq) / (maxFreq - minFreq || 1) * 18);
+                return `<span style="font-size:${size}px; opacity:${0.5 + (count/maxFreq)*0.5}">${word}</span>`;
+            }).join(' ');
+        }
+
+        // ----- 初始化 -----
+        setDailyQuestion();
+        generateTagCloud();
+    </script>
+</body>
+</html>
